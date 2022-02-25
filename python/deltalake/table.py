@@ -274,17 +274,18 @@ class DeltaTable:
             )
 
         format = ParquetFileFormat()
-
-        fragments = [
-            format.make_fragment(
-                file,
-                filesystem=filesystem,
-                partition_expression=part_expression,
-            )
-            for file, part_expression in self._table.dataset_partitions(partitions)
-        ]
-
-        return FileSystemDataset(fragments, self.pyarrow_schema(), format, filesystem)
+        paths = [file for file, _ in self._table.dataset_partitions(partitions)]
+        schema = self.pyarrow_schema()
+        partitioning = pyarrow.dataset.partitioning(
+            pyarrow.schema(
+                [
+                    (col, schema.field_by_name(col).type)
+                    for col in self.metadata().partition_columns
+                ]
+            ),
+            flavor="hive",
+        )
+        return pyarrow.dataset.dataset(paths, schema, format, filesystem, partitioning)
 
     def to_pyarrow_table(
         self,
